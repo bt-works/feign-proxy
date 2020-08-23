@@ -10,7 +10,6 @@
   <modules>
     <module>feign-autoproxy</module>
     <module>feign-proxy-sample</module>
-    <module>demo</module>
   </modules>
   <packaging>pom</packaging>
 

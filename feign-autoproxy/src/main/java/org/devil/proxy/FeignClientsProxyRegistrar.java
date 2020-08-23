@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.AnnotatedGenericBeanDefiniti
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConstructorArgumentValues;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.ResourceLoaderAware;
@@ -24,16 +25,19 @@ import org.springframework.util.StringUtils;
 
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * @author yaojun
  * 2020/5/8 14:47
  */
-public class FeignClientsProxy implements ImportBeanDefinitionRegistrar,
+public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar,
         ResourceLoaderAware, EnvironmentAware {
 
-    private final Logger logger = LoggerFactory.getLogger(FeignClientsProxy.class);
+    public final static String FEIGN_PROXY_ENABLE = "feign.proxy.enable";
+
+    private final Logger logger = LoggerFactory.getLogger(FeignClientsProxyRegistrar.class);
 
     private Environment environment;
 
@@ -56,8 +60,10 @@ public class FeignClientsProxy implements ImportBeanDefinitionRegistrar,
 
     private void registerProxy(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry){
         Map<String,Object> attribute = importingClassMetadata.getAnnotationAttributes(EnableAutoProxyFeign.class.getName(),true);
+        boolean environmentEnable = Optional.ofNullable(environment.getProperty(FEIGN_PROXY_ENABLE,Boolean.class)).orElseGet(() -> true);
 
-        Boolean isEnable = (Boolean) attribute.getOrDefault("enable",true);
+        //必须同时满足
+        Boolean isEnable = (Boolean) attribute.getOrDefault("enable",true) && environmentEnable;
         if (!isEnable){
             return;
         }

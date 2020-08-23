@@ -9,7 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author yaojun
  * 2020/5/28 11:11
  */
-@EnableAutoProxyFeign(basePackageClasses = TestClient.class,enable = false)
+@EnableAutoProxyFeign(basePackageClasses = TestClient.class,enable = true)
 @SpringBootApplication
 public class SampleApplication {
 

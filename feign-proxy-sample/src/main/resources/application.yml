@@ -6,9 +6,6 @@ logging:
     org.devil.proxy: debug
     org.springframework.boot: debug
     org.springframework.cloud: debug
-feign:
-  proxy:
-    enable: true
 spring:
   application:
     name: feign-autoproxy-example

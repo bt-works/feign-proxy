@@ -1,6 +1,6 @@
 package org.devil.proxy.annotation;
 
-import org.devil.proxy.FeignClientsProxy;
+import org.devil.proxy.FeignClientsProxyRegistrar;
 import org.springframework.context.annotation.Import;
 
 import java.lang.annotation.*;
@@ -12,7 +12,7 @@ import java.lang.annotation.*;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@Import(FeignClientsProxy.class)
+@Import(FeignClientsProxyRegistrar.class)
 public @interface EnableAutoProxyFeign {
 
     /**
