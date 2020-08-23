@@ -1,0 +1,19 @@
+server:
+  port: 8999
+logging:
+  level:
+    root: info
+    org.devil.proxy: debug
+    org.springframework.boot: debug
+    org.springframework.cloud: debug
+feign:
+  proxy:
+    enable: true
+spring:
+  application:
+    name: feign-autoproxy-example
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
