@@ -3,15 +3,19 @@ package org.devil.proxy;
 import org.devil.proxy.annotation.EnableAutoProxyFeign;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
-import org.springframework.beans.factory.annotation.AnnotatedGenericBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.ConstructorArgumentValues;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.ResourceLoaderAware;
+import org.springframework.context.annotation.AnnotationBeanNameGenerator;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.env.Environment;
@@ -33,7 +37,7 @@ import java.util.Set;
  * 2020/5/8 14:47
  */
 public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar,
-        ResourceLoaderAware, EnvironmentAware {
+        ResourceLoaderAware, EnvironmentAware, BeanFactoryAware {
 
     public final static String FEIGN_PROXY_ENABLE = "feign.proxy.enable";
 
@@ -42,6 +46,8 @@ public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar
     private Environment environment;
 
     private ResourceLoader resourceLoader;
+
+    private BeanFactory beanFactory;
 
     @Override
     public void setEnvironment(@NonNull Environment environment) {
@@ -82,14 +88,37 @@ public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar
         }
 
         if (proxyClients.length > 0) {
-            AnnotatedGenericBeanDefinition definition = new AnnotatedGenericBeanDefinition(FeignClientBeanPostProcess.class);
-            definition.setBeanClassName(FeignClientBeanPostProcess.class.getName());
-            definition.setBeanClass(FeignClientBeanPostProcess.class);
-            ConstructorArgumentValues values = new ConstructorArgumentValues();
-            values.addIndexedArgumentValue(0, proxyClients);
-            definition.setConstructorArgumentValues(values);
+            for (String proxyClient : proxyClients) {
+                registerClient(proxyClient,registry);
+            }
+        }
 
-            registry.registerBeanDefinition("feignClientBeanPostProcess", definition);
+    }
+
+    protected void registerClient(String client,BeanDefinitionRegistry registry){
+        try {
+//            Object o = beanFactory.getBean(Class.forName(client));
+            Class<?> target = FeignClientBuild.createClientProxy(client);
+            if (target != null) {
+                String feignClientName = Class.forName(client).getAnnotation(FeignClient.class).qualifier();
+                BeanDefinitionBuilder beanDefinitionBuilder = BeanDefinitionBuilder.genericBeanDefinition(target);
+                beanDefinitionBuilder.setScope(ConfigurableBeanFactory.SCOPE_SINGLETON);
+                beanDefinitionBuilder.setLazyInit(true);
+
+                BeanDefinition beanDefinition = beanDefinitionBuilder.getBeanDefinition();
+                if (StringUtils.isEmpty(feignClientName)){
+                    feignClientName = new AnnotationBeanNameGenerator().generateBeanName(beanDefinition,registry);
+                }
+                registry.registerBeanDefinition(feignClientName,beanDefinition);
+            }
+        }catch (BeansException e){
+            if (logger.isErrorEnabled()){
+                logger.error("can not getBean,client:{}",client);
+            }
+        } catch (Exception e) {
+            if (logger.isErrorEnabled()){
+                logger.error("proxy client {} error",client,e);
+            }
         }
 
     }
@@ -159,5 +188,10 @@ public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar
                 return isCandidate;
             }
         };
+    }
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+        this.beanFactory = beanFactory;
     }
 }
