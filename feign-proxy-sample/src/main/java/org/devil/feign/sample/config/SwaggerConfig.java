@@ -30,7 +30,7 @@ public class SwaggerConfig {
     }
 
     private ApiInfo apiInfo(){
-        return new ApiInfo("Teset","Teset Feign Proxy","V1.0","",new Contact("","",""),"","", Collections.emptyList())
+        return new ApiInfo("Test","Test Feign Proxy","V1.0","",new Contact("","",""),"","", Collections.emptyList())
                 ;
     }
 
