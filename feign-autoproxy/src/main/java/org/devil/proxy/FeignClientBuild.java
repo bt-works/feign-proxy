@@ -31,6 +31,7 @@ public class FeignClientBuild {
 
     private final static Logger logger = LoggerFactory.getLogger(FeignClientBuild.class);
 
+    private final static String PROXY_DELEGATE_SOURCE_NAME = "delegate";
 
     private FeignClientBuild() {
     }
@@ -46,48 +47,31 @@ public class FeignClientBuild {
 
         try {
             Class<?> claz = Class.forName(client);
+            ClassPool classPool = ClassPool.getDefault();
 
             /**
-             * client must be annotationed  @FeignClient
+             * create new proxy feign class and add annotation from client
              */
-            Assert.isTrue(claz.isAnnotationPresent(FeignClient.class), client + " is not feign client");
+            CtClass newFeignProxyClass = createNewFeignProxyClass(claz,classPool);
 
-            ClassPool classPool = ClassPool.getDefault();
-            String newClassName = claz + "#FeignAutoProxy";
-
-
-            CtClass ctClass = classPool.getOrNull(newClassName);
-            if (ctClass == null) {
-                ctClass = classPool.makeClass(newClassName);
-            }
-
-            if (ctClass.isFrozen()) {
-                ctClass.defrost();
-            }
-//            ctClass.addInterface(classPool.get(client));
-//            ctClass.setModifiers(Modifier.);
-            
+            /**
+             * add proxy client field
+             */
             CtClass beanCt = classPool.getCtClass(client);
-            CtField field = new CtField(beanCt,"delega",ctClass);
+            addProxyField(beanCt,newFeignProxyClass);
 
-            AnnotationsAttribute attribute = new AnnotationsAttribute(ctClass.getClassFile().getConstPool(), AnnotationsAttribute.visibleTag);
-            attribute.addAnnotation(new javassist.bytecode.annotation.Annotation(Resource.class.getName(),ctClass.getClassFile().getConstPool()));
-
-            field.getFieldInfo().addAttribute(attribute);
-
-            ctClass.addField(field);
-
+            /**
+             * generate proxy method
+             */
             for (CtMethod me : beanCt.getDeclaredMethods()) {
-                CtMethod ctMethod = new CtMethod(me.getReturnType(),me.getName(),me.getParameterTypes(),ctClass);
-                ctMethod.setBody("{return this.delega."+me.getName()+"($$);}");
-                ctClass.addMethod(ctMethod);
+                CtMethod ctMethod = new CtMethod(me.getReturnType(),me.getName(),me.getParameterTypes(),newFeignProxyClass);
+                ctMethod.setBody(String.format("{return this.%s.%s($$);}",PROXY_DELEGATE_SOURCE_NAME,me.getName()));
+                newFeignProxyClass.addMethod(ctMethod);
             }
 
-            addClassAnnotation(claz, ctClass);
-            addMethodAnnotation(claz, ctClass);
+            addMethodAnnotation(claz, newFeignProxyClass);
 
-//            ctClass.setSuperclass(classPool.get(beanClass.getName()));
-            return ctClass.toClass();
+            return newFeignProxyClass.toClass();
         } catch (ClassNotFoundException | NotFoundException | CannotCompileException e) {
             if (logger.isErrorEnabled()) {
                 logger.error("client {} can not find", client);
@@ -96,6 +80,54 @@ public class FeignClientBuild {
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new BeanInitializationException("proxy bean instant error", e);
         }
+    }
+
+    private static CtClass createNewFeignProxyClass(Class claz,ClassPool classPool) throws IllegalAccessException, NotFoundException, InvocationTargetException {
+        /**
+         * client must be annotationed  @FeignClient
+         */
+        Assert.isTrue(claz.isAnnotationPresent(FeignClient.class), claz.getName() + " is not feign client");
+
+        /**
+         * new Class Name
+         */
+        String newClassName = claz + "#FeignAutoProxy";
+
+        /**
+         * get class
+         */
+        CtClass ctClass = classPool.getOrNull(newClassName);
+        if (ctClass == null) {
+            ctClass = classPool.makeClass(newClassName);
+        }
+
+        if (ctClass.isFrozen()) {
+            ctClass.defrost();
+        }
+
+        /**
+         *  add annotation from client interface
+         */
+        addClassAnnotation(claz, ctClass);
+
+        return ctClass;
+    }
+
+    private static void addProxyField(CtClass beanCt,CtClass feignProxyClass) throws NotFoundException, CannotCompileException {
+        /**
+         * get source class,to add dependence to proxy class
+         */
+        CtField field = new CtField(beanCt,PROXY_DELEGATE_SOURCE_NAME,feignProxyClass);
+
+        AnnotationsAttribute attribute = new AnnotationsAttribute(feignProxyClass.getClassFile().getConstPool(), AnnotationsAttribute.visibleTag);
+        attribute.addAnnotation(new javassist.bytecode.annotation.Annotation(Resource.class.getName(),feignProxyClass.getClassFile().getConstPool()));
+
+        /**
+         * add annotation to use spring auto inject
+         */
+        field.getFieldInfo().addAttribute(attribute);
+
+        feignProxyClass.addField(field);
     }
 
     private static void addClassAnnotation(Class feignInterface, CtClass ctClass) throws NotFoundException, InvocationTargetException, IllegalAccessException {
@@ -184,6 +216,9 @@ public class FeignClientBuild {
                 attribute = new AnnotationsAttribute(methodInfo.getConstPool(), AnnotationsAttribute.visibleTag);
             }
 
+            /**
+             * 增加方法上的注解
+             */
             for (Annotation annotation : method.getDeclaredAnnotations()) {
                 if (attribute.getAnnotation(annotation.annotationType().getName()) != null) {
                     continue;
@@ -196,6 +231,9 @@ public class FeignClientBuild {
             }
             methodInfo.addAttribute(attribute);
 
+            /**
+             * 方法参数上的注解
+             */
             Annotation[][] paramsAnnotation = method.getParameterAnnotations();
 
             ParameterAnnotationsAttribute parameterAnnotationsAttribute = (ParameterAnnotationsAttribute) methodInfo.getAttribute(ParameterAnnotationsAttribute.visibleTag);
@@ -205,8 +243,13 @@ public class FeignClientBuild {
             if (parameterAnnotationsAttribute == null) {
                 parameterAnnotationsAttribute = new ParameterAnnotationsAttribute(methodInfo.getConstPool(), ParameterAnnotationsAttribute.visibleTag);
             }
+
             javassist.bytecode.annotation.Annotation[][] annotations = parameterAnnotationsAttribute.getAnnotations();
             List<javassist.bytecode.annotation.Annotation[]> targetAnnotations = new ArrayList<>();
+
+            /**
+             * 将原始client 参数上的annotation 增加到proxyFeignClient上
+             */
             for (int i = 0; i < paramsAnnotation.length; i++) {
                 targetAnnotations.add(mergeAnnotations(paramsAnnotation[i], annotations.length > i ? annotations[i] : new javassist.bytecode.annotation.Annotation[0], methodInfo.getConstPool()));
             }
@@ -218,19 +261,20 @@ public class FeignClientBuild {
         }
     }
 
-    /**
-     * 合并父类注解和子类注解
-     */
     private static javassist.bytecode.annotation.Annotation[] mergeAnnotations(Annotation[] javaAnnotations, javassist.bytecode.annotation.Annotation[] mergeAnnotation, ConstPool constPool) throws NotFoundException, InvocationTargetException, IllegalAccessException {
         List<javassist.bytecode.annotation.Annotation> annotations = new ArrayList<>();
         for (Annotation javaAnnotation : javaAnnotations) {
+            boolean isContains = false;
             for (javassist.bytecode.annotation.Annotation assistAnnotation : mergeAnnotation) {
                 if (assistAnnotation.getTypeName().equals(javaAnnotation.annotationType().getName())) {
-                    continue;
+                    isContains = true;
+                    break;
                 }
             }
-            javassist.bytecode.annotation.Annotation assistAnnotation = AnnotationUtil.createAnnotation(javaAnnotation, constPool);
-            annotations.add(assistAnnotation);
+            if (!isContains) {
+                javassist.bytecode.annotation.Annotation assistAnnotation = AnnotationUtil.createAnnotation(javaAnnotation, constPool);
+                annotations.add(assistAnnotation);
+            }
         }
         annotations.addAll(Arrays.asList(mergeAnnotation));
         return annotations.toArray(new javassist.bytecode.annotation.Annotation[0]);
