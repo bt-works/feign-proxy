@@ -37,10 +37,10 @@ public class FeignClientBuild {
 
     /**
      * @param client feignClient Class
-     * @return
+     * @return 代理class
      * @throws Exception
      */
-    protected static Class createClientProxy(@NonNull String client) throws Exception {
+    protected static Class<?> createClientProxy(@NonNull String client) throws Exception {
 
         //如果没有feignClient类需要处理
 

@@ -97,6 +97,9 @@ public class FeignClientsProxyRegistrar implements ImportBeanDefinitionRegistrar
 
     protected void registerClient(String client,BeanDefinitionRegistry registry){
         try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("auto proxy client,{}",client);
+            }
 //            Object o = beanFactory.getBean(Class.forName(client));
             Class<?> target = FeignClientBuild.createClientProxy(client);
             if (target != null) {
